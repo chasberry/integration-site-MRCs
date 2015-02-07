@@ -1,0 +1,240 @@
+% Created 2015-02-07 Sat 12:17
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{fixltx2e}
+\usepackage{graphicx}
+\usepackage{longtable}
+\usepackage{float}
+\usepackage{wrapfig}
+\usepackage{rotating}
+\usepackage[normalem]{ulem}
+\usepackage{amsmath}
+\usepackage{textcomp}
+\usepackage{marvosym}
+\usepackage{wasysym}
+\usepackage{amssymb}
+\usepackage{capt-of}
+\usepackage{hyperref}
+\tolerance=1000
+\author{Charles Berry}
+\date{\today}
+\title{Finding Matched Random Controls for DNA Insertion Sites}
+\hypersetup{
+ pdfkeywords={},
+  pdfsubject={Use the Schroeder Data to Show How to Get MRCs},
+  pdfcreator={Emacs 24.4.1 (Org mode 8.3beta)}}
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+%\VignetteEngine{knitr::knitr}
+
+\section{Introduction}
+\label{sec-1}
+
+An example is presented of the use of the \verb~restrSiteUtils~ package to
+create a mapping of restriction sites and then use that mapping to
+find matched random controls.  \smallskip
+
+The data used are from 
+\begin{quote}
+Schröder, Astrid RW, et al. "HIV-1 integration in the human genome
+favors active genes and local hotspots." Cell 110.4 (2002): 521-529.
+\end{quote}
+
+\section{Create Restriction Data Mapping}
+\label{sec-2}
+
+Schröder et al used a cocktail of three restriction enzymes to recover
+integration sites. We suppose that the host DNA is broken at all such
+sites, so the closest one to the intgration site is what matters.
+
+The three recognition sequences are \texttt{ACTAGT}, \texttt{CCTAGG}, and \texttt{GCTAGC}
+
+The `restrSiteUtils' library must be intalled in a directory whose path is
+in the \verb~rlib~ variable and that directory will be used to install a
+data package that maps the recognition sites in a way that is useful
+in finding distances to them. Adjust that path as needed.
+To use the system library, remove or comment out the line.
+
+
+<<tidy=TRUE>>=
+rlib <- "../Rlib"
+.libPaths(rlib)
+@ %def
+
+The `BSgenome.Hsapiens.UCSC.hg18' BioConductor package also must be
+installed; it holds the genome sequence for the \texttt{hg18} freeze.
+
+<<tidy=FALSE, size="small">>=
+require( restrSiteUtils )
+rseq <- c("ACTAGT", "CCTAGG", "GCTAGC")
+makeRestrDataPackage( tempdir(), rseq, "hg18",
+                     "BSgenome.Hsapiens.UCSC.hg18",
+                     "6-CUTTER",
+                     installLib=TRUE)
+@ %def
+
+\section{Read in Schroder et al Data}
+\label{sec-3}
+
+The \verb~csv~ file has the integration ste positions (actually the
+position of the base preceeding the point of insertion).
+
+After reading the data, it is rendered as a `GRanges' object.
+
+<<read-data, tidy=FALSE, size="small">>=
+sites.df <- read.csv("sites.df.csv")
+
+sites.gr <-
+    with(sites.df,
+         GRanges(seqnames,
+                 IRanges( start=start, width=2),
+                 strand=strand, Sequence=Sequence,
+                 BID=BID))
+
+colnames(sites.df)
+
+@ %def
+
+\section{Get Distances From Integration Sites to Restriction Sites}
+\label{sec-4}
+
+The function \verb~distRL~ finds the distances using the \verb~width.GR~ object
+provided by the \texttt{restrEnz.Hsapiens.UCSC.hg18.RENZ.6.CUTTER} data
+package.
+
+<<get-dist, tidy=FALSE, size="small">>=
+require( restrEnz.Hsapiens.UCSC.hg18.RENZ.6.CUTTER )
+site.dist <- distRL( sites.gr, width.GR )
+@ %def
+
+As a sanity check, the ditribution of distances in the reverse
+direction (i.e., away from the recognition site that recovered the
+insertion) should be a lot different.
+
+<<tidy=FALSE, size="small">>=
+sites.reverse <- sites.gr
+strand( sites.reverse ) <-
+    ifelse( strand( sites.gr ) == "+", "-", "+")
+site.dist.reverse <- distRL( sites.reverse, width.GR )
+@ %def
+
+And it is. The mean is a good deal larger. And there is one site
+(\textbf{\texttt{NA}}) that had no recognition site flanking it in  \emph{that}
+direction before a sequence gap or chromosome was found.
+
+<<summarize, tidy=FALSE, size="small">>=
+summary( site.dist )
+summary( site.dist.reverse )
+@ %def
+
+
+\section{Create Matched Random Controls aka MRCs}
+\label{sec-5}
+
+The function \verb~sampleDist~ creates controls. Here there are 3 such for
+every integration site. \verb~mrc.gr~ is a GRanges object that holds the
+locations of the MRCs. 
+
+<<mrcs, tidy=FALSE, size="small">>=
+mrc.gr <- sampleDist(3, site.dist, width.GR,
+                     parentNames=sites.gr$Sequence)
+
+mrc.dist <- distRL( mrc.gr, width.GR)
+
+mrc.dist.matrix <-
+    do.call(rbind, tapply(mrc.dist, mrc.gr$parentNames, c))
+@ %def
+
+As a check the distances for these are found and compared to their
+parent sites. They all should be (and do) have distances equal to
+their parents'.
+
+<<tidy=FALSE, size="small">>=
+ 
+## Be sure rows are in same order as sites.gr$Sequence or the
+## following check will not work:
+
+all(sites.gr$Sequence==rownames(mrc.dist.matrix))
+
+## Each MRC is found to have the same distance as its parent:
+
+all(site.dist==mrc.dist.matrix)
+
+@ %def
+
+\section{Combine MRCs and Sites}
+\label{sec-6}
+
+To do anything useful, the MRCs and sites must be used together. Here
+a \verb~GRanges~ instance is created that uses \verb~mcols(combo.gr)$Sequence~
+to identify the parent and its MRCs and \verb~type~ to indicate whether the
+element is a site ("insertion") or MRC ("match").
+
+<<combos, tidy=FALSE, size="small">>=
+
+mcols(mrc.gr) <- DataFrame(Sequence=mrc.gr$parentNames)
+
+mcols(sites.gr)$BID <- NULL
+
+combo.gr <- c(sites.gr,mrc.gr)
+
+## use `type' to distinguish MRCs and real sites
+
+mcols(combo.gr)$type <-
+    rep(c("insertion","match"),c(length(sites.gr),length(mrc.gr)))
+
+@ %def
+
+\section{Check Flanking Sequence of MRCs vs Sites}
+\label{sec-7}
+
+As an illustration of use, here the favored local sequence is
+determined.
+
+The sequence motif \texttt{GTNAC} favored by HIV is shown here. The table
+gives the base 2 logarithm of the relative proportion of bases for
+integration sites minus that for MRCs. Thus, values greater than 0.0
+show favored bases.  Positions 11--15 are enclosed by the sites of
+attack.
+
+<<get.flank, tidy=FALSE, size="small">>=
+
+combo.flank.20 <-
+    shift( flank( combo.gr, 10L, start=TRUE, both=TRUE),
+          ifelse( strand( combo.gr ) == "+", 1L, -1L))
+
+seq.flank.20 <-
+      getSeq( Hsapiens, combo.flank.20, as.character=TRUE)
+
+t( sapply( 1:20, function(x) {
+    y <- substring( seq.flank.20, x, x)
+    tab <- prop.table( table( y, combo.gr$type ), 2)
+    round( log( tab[,1] / tab[,2], 2 ), 2 )}))
+
+@ %def
+
+\section{sessionInfo}
+\label{sec-8}
+
+The document required \Sexpr{ round(proc.time()[3],1) }  seconds to run.
+Here is the setup used.
+
+<<results="asis", tidy=FALSE>>=
+toLatex(sessionInfo())
+@ %def
+
+\section{License and Acknowledgement}
+\label{sec-9}
+
+This document and the software it contains are copyrighted as of 2015,
+by Charles C. Berry and offered for use under the GPL-3 license, see
+\url{http://www.gnu.org/licenses/} for details on that license.
+
+The development of code and this document was supported by the
+National Institutes of Health (2R01 AI052845 and 5R01 AI082020).
+% Emacs 24.4.1 (Org mode 8.3beta)
+\end{document}
