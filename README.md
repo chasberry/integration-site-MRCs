@@ -78,7 +78,7 @@ comparable restriction site match those of an integration site.
 
 
 <tr>
-<td class="left">`restrSiteUtils_1.2.4.tar.gz`</td>
+<td class="left">`restrSiteUtils_1.2.5.tar.gz`</td>
 <td class="left">R Package Source Code</td>
 </tr>
 </tbody>
