@@ -51,7 +51,8 @@ mrc.dist.matrix <-
 ## Be sure rows are in same order as sites.gr$Sequence or the
 ## following check will not work:
 
-all(sites.gr$Sequence==rownames(mrc.dist.matrix))
+all(length(sites.gr$Sequence),
+    sites.gr$Sequence==rownames(mrc.dist.matrix))
 
 ## Each MRC is found to have the same distance as its parent:
 
