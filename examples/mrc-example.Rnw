@@ -1,4 +1,4 @@
-% Created 2015-02-07 Sat 12:17
+% Created 2015-03-13 Fri 13:40
 \documentclass[11pt]{article}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
@@ -21,9 +21,12 @@
 \date{\today}
 \title{Finding Matched Random Controls for DNA Insertion Sites}
 \hypersetup{
+ pdfauthor={Charles Berry},
+ pdftitle={Finding Matched Random Controls for DNA Insertion Sites},
  pdfkeywords={},
-  pdfsubject={Use the Schroeder Data to Show How to Get MRCs},
-  pdfcreator={Emacs 24.4.1 (Org mode 8.3beta)}}
+ pdfsubject={Use the Schroeder Data to Show How to Get MRCs},
+ pdfcreator={Emacs 24.4.1 (Org mode 8.3beta)}, 
+ pdflang={English}}
 \begin{document}
 
 \maketitle
@@ -158,7 +161,8 @@ their parents'.
 ## Be sure rows are in same order as sites.gr$Sequence or the
 ## following check will not work:
 
-all(sites.gr$Sequence==rownames(mrc.dist.matrix))
+all(length(sites.gr$Sequence),
+    sites.gr$Sequence==rownames(mrc.dist.matrix))
 
 ## Each MRC is found to have the same distance as its parent:
 
